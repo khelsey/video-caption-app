@@ -1,11 +1,10 @@
-# VIDEO CAPTIONING WEB APP (Streamlit) - updated to remove OpenCV
+# VIDEO CAPTIONING WEB APP (Streamlit) - updated to remove OpenCV and tempfile
 
 import streamlit as st
 import torch
 import torchvision.transforms as transforms
 import torchvision.models as models
 from PIL import Image
-import tempfile
 import os
 import imageio
 
@@ -64,13 +63,12 @@ st.title("🎥 Video Captioning App (Streamlit Cloud Compatible)")
 uploaded_video = st.file_uploader("Upload a video file", type=["mp4", "mov", "avi"])
 
 if uploaded_video:
-    tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-    tfile.write(uploaded_video.read())
-    tfile.close()
-
     try:
+        with open("uploaded_video.mp4", "wb") as out_file:
+            out_file.write(uploaded_video.read())
+
         # Read video and extract first frame using imageio
-        reader = imageio.get_reader(tfile.name, format='ffmpeg')
+        reader = imageio.get_reader("uploaded_video.mp4", format='ffmpeg')
         frame = reader.get_data(0)
         image = Image.fromarray(frame)
 

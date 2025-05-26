@@ -1,18 +1,15 @@
-# VIDEO CAPTIONING WEB APP (Streamlit)
+# VIDEO CAPTIONING WEB APP (Streamlit) - updated to remove OpenCV
 
 import streamlit as st
 import torch
 import torchvision.transforms as transforms
 import torchvision.models as models
 from PIL import Image
-import cv2
 import tempfile
 import os
+import imageio
 
 # Load model (assume model and vocab already loaded)
-# This example assumes model is trained and available as `model`, `resnet`, `vocab`, `generate_caption()`
-
-# Dummy setup (replace with your trained model)
 class CaptionModel(torch.nn.Module):
     def __init__(self, feat_dim, embed_dim, hidden_dim, vocab_size):
         super().__init__()
@@ -29,10 +26,13 @@ class CaptionModel(torch.nn.Module):
 
 @st.cache_resource
 def load_model():
+    import json
+    with open("vocab.json") as f:
+        vocab = json.load(f)
     model = CaptionModel(2048, 256, 512, len(vocab))
     model.load_state_dict(torch.load("trained_caption_model.pt", map_location=torch.device('cpu')))
     model.eval()
-    return model
+    return model, vocab
 
 @st.cache_resource
 def load_resnet():
@@ -59,23 +59,20 @@ def generate_caption(model, feature, vocab, max_len=20):
     return ' '.join(caption[1:])
 
 # Streamlit App UI
-st.title("🎥 Video Captioning App")
+st.title("🎥 Video Captioning App (Streamlit Cloud Compatible)")
 
 uploaded_video = st.file_uploader("Upload a video file", type=["mp4", "mov", "avi"])
 
 if uploaded_video:
-    tfile = tempfile.NamedTemporaryFile(delete=False)
+    tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
     tfile.write(uploaded_video.read())
+    tfile.close()
 
-    cap = cv2.VideoCapture(tfile.name)
-    success, frame = cap.read()
-    cap.release()
-
-    if success:
-        # Save to image
-        temp_img_path = "frame.jpg"
-        cv2.imwrite(temp_img_path, frame)
-        image = Image.open(temp_img_path).convert("RGB")
+    try:
+        # Read video and extract first frame using imageio
+        reader = imageio.get_reader(tfile.name, format='ffmpeg')
+        frame = reader.get_data(0)
+        image = Image.fromarray(frame)
 
         # Display image
         st.image(image, caption="Extracted Frame", use_column_width=True)
@@ -89,12 +86,13 @@ if uploaded_video:
         ])
 
         resnet = load_resnet()
-        model = load_model()
+        model, vocab = load_model()
         tensor = transform(image).unsqueeze(0)
         with torch.no_grad():
             feature = resnet(tensor).squeeze()
             caption = generate_caption(model, feature, vocab)
 
         st.success(f"📝 Generated Caption: {caption}")
-    else:
-        st.error("❌ Failed to read frame from video.")
+
+    except Exception as e:
+        st.error(f"❌ Failed to process video. Error: {e}")
